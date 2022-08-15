@@ -1,24 +1,26 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	// Uncomment this block to pass the first stage
+
 	"net"
 	"os"
 )
 
 func handleRequest(conn net.Conn) {
 	defer conn.Close()
+	reader := bufio.NewReader(conn)
 	for {
-		if _, err := conn.Read([]byte{}); err != nil {
-			fmt.Println("Error reading data from connection: ", err.Error())
+		object, err := ParseRESP(reader)
+		if err != nil {
+			fmt.Println(err.Error())
 			os.Exit(1)
 		}
-		// if _, err := conn.Write([]byte("+PONG\r\n")); err != nil {
-		// 	fmt.Println("Error sending data to connection: ", err.Error())
-		// 	os.Exit(1)
-		// }
-		conn.Write([]byte("+PONG\r\n"))
+		if object == nil {
+			break
+		}
+		conn.Write([]byte(object.response()))
 	}
 }
 
