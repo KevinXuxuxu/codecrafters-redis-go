@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-func handleRequest(conn net.Conn) {
+func handleRequest(conn net.Conn, data *SafeMap) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 	for {
@@ -20,7 +20,7 @@ func handleRequest(conn net.Conn) {
 		if object == nil {
 			break
 		}
-		conn.Write([]byte(object.response()))
+		conn.Write([]byte(object.response(data)))
 	}
 }
 
@@ -33,12 +33,13 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+	data := newSafeMap()
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		go handleRequest(conn)
+		go handleRequest(conn, data)
 	}
 }

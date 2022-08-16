@@ -26,7 +26,7 @@ func strip(s string) string {
 type RESP interface {
 	datatype() DataType
 	serialize() string
-	response() string
+	response(data *SafeMap) string
 }
 
 type RESPSimpleString struct {
@@ -50,7 +50,7 @@ func (r *RESPSimpleString) serialize() string {
 	return fmt.Sprintf("+%s%s", r.data, NEWLINE)
 }
 
-func (r *RESPSimpleString) response() string {
+func (r *RESPSimpleString) response(data *SafeMap) string {
 	return r.serialize()
 }
 
@@ -75,7 +75,7 @@ func (r *RESPError) serialize() string {
 	return fmt.Sprintf("-%s%s", r.eMsg, NEWLINE)
 }
 
-func (r *RESPError) response() string {
+func (r *RESPError) response(data *SafeMap) string {
 	return r.serialize()
 }
 
@@ -104,7 +104,7 @@ func (r *RESPInteger) serialize() string {
 	return fmt.Sprintf(":%d%s", r.data, NEWLINE)
 }
 
-func (r *RESPInteger) response() string {
+func (r *RESPInteger) response(data *SafeMap) string {
 	return r.serialize()
 }
 
@@ -138,7 +138,7 @@ func (r *RESPBulkString) serialize() string {
 	return fmt.Sprintf("$%d%s%s%s", r.length, NEWLINE, r.data, NEWLINE)
 }
 
-func (r *RESPBulkString) response() string {
+func (r *RESPBulkString) response(data *SafeMap) string {
 	return r.serialize()
 }
 
@@ -176,7 +176,7 @@ func (r *RESPArray) serialize() string {
 	return result
 }
 
-func (r *RESPArray) response() string {
+func (r *RESPArray) response(data *SafeMap) string {
 	switch r.data[0].datatype() {
 	case BulkString:
 		cmd, _ := r.data[0].(*RESPBulkString)
@@ -185,6 +185,27 @@ func (r *RESPArray) response() string {
 			return r.data[1].serialize()
 		case "ping":
 			return (&RESPBulkString{4, "PONG"}).serialize()
+		case "set":
+			key, ok := r.data[1].(*RESPBulkString)
+			if !ok {
+				return (&RESPError{"SET command expect bulk string for KEY"}).serialize()
+			}
+			value, ok := r.data[2].(*RESPBulkString)
+			if !ok {
+				return (&RESPError{"SET command expect bulk string for VALUE"}).serialize()
+			}
+			data.set(key.data, value.data)
+			return (&RESPSimpleString{"OK"}).serialize()
+		case "get":
+			key, ok := r.data[1].(*RESPBulkString)
+			if !ok {
+				return (&RESPError{"SET command expect bulk string for KEY"}).serialize()
+			}
+			value, err := data.get(key.data)
+			if err != nil {
+				return (&RESPError{err.Error()}).serialize()
+			}
+			return (&RESPBulkString{len(value), value}).serialize()
 		default:
 			return (&RESPError{"Unsupported command: " + cmd.data}).serialize()
 		}
