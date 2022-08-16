@@ -29,6 +29,20 @@ type RESP interface {
 	response(data *SafeMap) string
 }
 
+type RESPNil struct{}
+
+func (r *RESPNil) datatype() DataType {
+	return BulkString
+}
+
+func (r *RESPNil) serialize() string {
+	return fmt.Sprintf("$-1%s", NEWLINE)
+}
+
+func (r *RESPNil) response(data *SafeMap) string {
+	return r.serialize()
+}
+
 type RESPSimpleString struct {
 	data string
 }
@@ -194,7 +208,23 @@ func (r *RESPArray) response(data *SafeMap) string {
 			if !ok {
 				return (&RESPError{"SET command expect bulk string for VALUE"}).serialize()
 			}
-			data.set(key.data, value.data)
+			if len(r.data) == 5 {
+				px, ok := r.data[3].(*RESPBulkString)
+				if !ok || strings.ToLower(px.data) != "px" {
+					return (&RESPError{"fail to parse PX parameter in SET command"}).serialize()
+				}
+				integer, ok := r.data[4].(*RESPBulkString)
+				if !ok {
+					return (&RESPError{"PX parameter in SET command expect bulk string"}).serialize()
+				}
+				n, err := strconv.Atoi(integer.data)
+				if err != nil {
+					return (&RESPError{"failed to parse expire milliseconds: " + integer.data}).serialize()
+				}
+				data.setWithExpiry(key.data, value.data, n)
+			} else {
+				data.set(key.data, value.data)
+			}
 			return (&RESPSimpleString{"OK"}).serialize()
 		case "get":
 			key, ok := r.data[1].(*RESPBulkString)
@@ -203,7 +233,7 @@ func (r *RESPArray) response(data *SafeMap) string {
 			}
 			value, err := data.get(key.data)
 			if err != nil {
-				return (&RESPError{err.Error()}).serialize()
+				return (&RESPNil{}).serialize()
 			}
 			return (&RESPBulkString{len(value), value}).serialize()
 		default:
